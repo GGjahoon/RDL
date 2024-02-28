@@ -12,4 +12,10 @@ type IOManager interface {
 	Sync() error
 	// Close ,close the io
 	Close() error
+	// Size , get the size of file
+	Size() (int64, error)
+}
+
+func NewIoManager(filename string) (IOManager, error) {
+	return NewFileIO(filename)
 }

@@ -1,13 +1,14 @@
 package fio
 
 import (
-	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewFileIO(t *testing.T) {
-	fio, err := NewFileIO(filepath.Join("./test", "a.data"))
+	fio, err := NewFileIO(filepath.Join("/home/jahoon/data", "a.data"))
 	require.NoError(t, err)
 	require.NotNil(t, fio)
 }
