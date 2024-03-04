@@ -8,99 +8,99 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBTree_Get(t *testing.T) {
-	bt := NewBTree()
-	Pres1 := bt.Put([]byte("abc"), &data.LogRecordPos{
+func TestArtGet(t *testing.T) {
+	art := NewAdaPtiveRadixTree()
+	Pres1 := art.Put([]byte("abc"), &data.LogRecordPos{
 		Fid:    1,
 		Offset: 10,
 	})
 	require.True(t, Pres1)
 
-	Gres1 := bt.Get([]byte("abc"))
+	Gres1 := art.Get([]byte("abc"))
 	require.Equal(t, Gres1.Fid, uint32(1))
 	require.Equal(t, Gres1.Offset, int64(10))
 
-	Pres2 := bt.Put([]byte("abc"), &data.LogRecordPos{
+	Pres2 := art.Put([]byte("abc"), &data.LogRecordPos{
 		Fid:    2,
 		Offset: 12,
 	})
 	require.True(t, Pres2)
-	Gres2 := bt.Get([]byte("abc"))
+	Gres2 := art.Get([]byte("abc"))
 	require.Equal(t, Gres2.Fid, uint32(2))
 	require.Equal(t, Gres2.Offset, int64(12))
 
 }
-func TestBTree_Delete(t *testing.T) {
-	bt := NewBTree()
-	Pres1 := bt.Put([]byte("abc"), &data.LogRecordPos{
+func TestARTree_Delete(t *testing.T) {
+	art := NewAdaPtiveRadixTree()
+	Pres1 := art.Put([]byte("abc"), &data.LogRecordPos{
 		Fid:    1,
 		Offset: 10,
 	})
 	require.True(t, Pres1)
 
-	Dres1 := bt.Delete([]byte("abc"))
+	Dres1 := art.Delete([]byte("abc"))
 	require.True(t, Dres1)
 
-	Gres1 := bt.Get([]byte("abc"))
+	Gres1 := art.Get([]byte("abc"))
 	t.Log(Gres1)
 
-	Dres2 := bt.Delete([]byte("abc"))
+	Dres2 := art.Delete([]byte("abc"))
 	require.False(t, Dres2)
 
 }
 
-func TestBTree_Iterator(t *testing.T) {
+func TestARTree_Iterator(t *testing.T) {
 
 	var cur = []byte("abcdefg")
 
-	bt1 := NewBTree()
+	art1 := NewAdaPtiveRadixTree()
 	// Btree为空
-	iter1 := bt1.Iterator(false)
+	iter1 := art1.Iterator(false)
 	assert.Equal(t, false, iter1.Valid())
 
 	// 插入数据
-	ok1 := bt1.Put([]byte("a"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	ok1 := art1.Put([]byte("a"), &data.LogRecordPos{Fid: 1, Offset: 10})
 	assert.Equal(t, ok1, true)
-	iter2 := bt1.Iterator(false)
+	iter2 := art1.Iterator(false)
 	assert.True(t, iter2.Valid())
 	assert.Equal(t, iter2.Key(), []byte("a"))
 	assert.Equal(t, iter2.Value().Fid, uint32(1))
 	assert.Equal(t, iter2.Value().Offset, int64(10))
 
 	iter2.Next()
-	assert.Equal(t, 1, iter2.(*btreeIterator).currIndex)
+	assert.Equal(t, 1, iter2.(*artIterator).currIndex)
 	assert.False(t, iter1.Valid())
 
 	//正向遍历
-	bt1.Put([]byte("b"), &data.LogRecordPos{Fid: 1, Offset: 10})
-	bt1.Put([]byte("c"), &data.LogRecordPos{Fid: 1, Offset: 10})
-	bt1.Put([]byte("d"), &data.LogRecordPos{Fid: 1, Offset: 10})
-	bt1.Put([]byte("e"), &data.LogRecordPos{Fid: 1, Offset: 10})
-	bt1.Put([]byte("f"), &data.LogRecordPos{Fid: 1, Offset: 10})
-	bt1.Put([]byte("g"), &data.LogRecordPos{Fid: 1, Offset: 10})
-	//测试btree.Size()
-	size := bt1.Size()
-	assert.Equal(t, 7, size)
-	iter3 := bt1.Iterator(false)
+	art1.Put([]byte("b"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	art1.Put([]byte("c"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	art1.Put([]byte("d"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	art1.Put([]byte("e"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	art1.Put([]byte("f"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	art1.Put([]byte("g"), &data.LogRecordPos{Fid: 1, Offset: 10})
+	size := art1.Size()
+	require.Equal(t, 7, size)
+
+	iter3 := art1.Iterator(false)
 	for i := 0; i < len(cur); i++ {
-		assert.Equal(t, cur[i], iter3.(*btreeIterator).values[i].key[0])
+		assert.Equal(t, cur[i], iter3.(*artIterator).values[i].key[0])
 	}
 
 	//反向遍历
-	iter4 := bt1.Iterator(true)
+	iter4 := art1.Iterator(true)
 	for i := 0; i < len(cur); i++ {
 		x := len(cur) - i - 1
-		assert.Equal(t, cur[i], iter4.(*btreeIterator).values[x].key[0])
+		assert.Equal(t, cur[i], iter4.(*artIterator).values[x].key[0])
 	}
 
 	//rewind
 	for i := 0; i < 4; i++ {
 		iter4.Next()
 	}
-	assert.Equal(t, 4, iter4.(*btreeIterator).currIndex)
+	assert.Equal(t, 4, iter4.(*artIterator).currIndex)
 
 	iter4.Rewind()
-	assert.Equal(t, 0, iter4.(*btreeIterator).currIndex)
+	assert.Equal(t, 0, iter4.(*artIterator).currIndex)
 
 	//seek
 	//正序
@@ -132,8 +132,8 @@ func TestBTree_Iterator(t *testing.T) {
 	iter3.Close()
 	iter4.Close()
 	//查看迭代器数组是否为nil
-	assert.Nil(t, iter1.(*btreeIterator).values)
-	assert.Nil(t, iter2.(*btreeIterator).values)
-	assert.Nil(t, iter3.(*btreeIterator).values)
-	assert.Nil(t, iter4.(*btreeIterator).values)
+	assert.Nil(t, iter1.(*artIterator).values)
+	assert.Nil(t, iter2.(*artIterator).values)
+	assert.Nil(t, iter3.(*artIterator).values)
+	assert.Nil(t, iter4.(*artIterator).values)
 }

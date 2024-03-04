@@ -122,3 +122,32 @@ func getLogRecordCRC(logRecord *LogRecord, header []byte) uint32 {
 	crc = crc32.Update(crc, crc32.IEEETable, logRecord.Value)
 	return crc
 }
+
+// EncPosLogRecordWithKeyAndPos 使用索引信息构建posRecord，key作为实际的key，编码后的pos byte数组作为value进行编码
+func EncPosLogRecordWithKeyAndPos(key []byte, pos *LogRecordPos) []byte {
+	posLogRecord := &LogRecord{
+		Key:   key,
+		Value: EncCodeLogRecordPos(pos),
+	}
+	//编码posLogRecord
+	encPosLogRecord, _ := EnCodeLogRecord(posLogRecord)
+	return encPosLogRecord
+
+}
+func EncCodeLogRecordPos(pos *LogRecordPos) []byte {
+	buf := make([]byte, binary.MaxVarintLen32+binary.MaxVarintLen64)
+	var index = 0
+	index += binary.PutVarint(buf[index:], int64(pos.Fid))
+	index += binary.PutVarint(buf[index:], pos.Offset)
+	return buf[:index]
+}
+func DecCodeLogRecordPos(buf []byte) *LogRecordPos {
+	var index = 0
+	fid, n := binary.Varint(buf[index:])
+	index += n
+	offset, _ := binary.Varint(buf[index:])
+	return &LogRecordPos{
+		Fid:    uint32(fid),
+		Offset: offset,
+	}
+}

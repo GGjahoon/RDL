@@ -14,7 +14,12 @@ var (
 	ErrorDataDeleted    = errors.New("this key-value has been deleted")
 )
 
-const DataFileNameSuffix = ".data"
+const (
+	DataFileNameSuffix    = ".data"
+	HintFileName          = "hint-index"
+	MergeFinishedFileName = "merge-finished"
+	SeqNoFileName         = "seq-no"
+)
 
 type DataFile struct {
 	FileID    uint32
@@ -23,7 +28,28 @@ type DataFile struct {
 }
 
 func OpenDataFile(dirpath string, fileId uint32) (*DataFile, error) {
-	fileName := filepath.Join(dirpath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+	fileName := GetDataFileName(dirpath, fileId)
+	return openFile(fileName, fileId)
+}
+func GetDataFileName(dirpath string, fileId uint32) string {
+	return filepath.Join(dirpath, fmt.Sprintf("%09d", fileId)+DataFileNameSuffix)
+}
+func OpenHintFile(dirpath string) (*DataFile, error) {
+	fileName := filepath.Join(dirpath, HintFileName)
+	return openFile(fileName, 0)
+}
+func OpenMergeFinishedFile(dirpath string) (*DataFile, error) {
+	fileName := filepath.Join(dirpath, MergeFinishedFileName)
+	return openFile(fileName, 0)
+}
+
+// 存储事务序列号文件
+func OpenSeqNoFile(dirpath string) (*DataFile, error) {
+	fileName := filepath.Join(dirpath, SeqNoFileName)
+	return openFile(fileName, 0)
+}
+
+func openFile(fileName string, fileId uint32) (*DataFile, error) {
 	ioManager, err := fio.NewIoManager(fileName)
 	if err != nil {
 		return nil, err
@@ -35,6 +61,7 @@ func OpenDataFile(dirpath string, fileId uint32) (*DataFile, error) {
 		IoManager: ioManager,
 	}, nil
 }
+
 func (df *DataFile) Sync() error {
 	return df.IoManager.Sync()
 }

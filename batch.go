@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/GGjahon/bitcask-kv/data"
+	"github.com/GGjahon/bitcask-kv/index"
 )
 
 const nonTransactionSeqNo uint64 = 0
@@ -20,6 +21,10 @@ type WriteBatch struct {
 }
 
 func (db *DB) NewWriteBatch(opts ...WriteBatchOption) *WriteBatch {
+	if db.IndexType == index.BPtree && !db.seqNoFExists && !db.isInitial {
+		panic("cannot use write batch , seq no file not exists")
+	}
+
 	writeBatch := &WriteBatch{
 		options: WriteBatchOptions{
 			MaxBatchNum: DefaultMaxBatchNum,

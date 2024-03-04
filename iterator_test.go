@@ -2,8 +2,6 @@ package bitcaskkv
 
 import (
 	"fmt"
-	"path"
-	"path/filepath"
 	"testing"
 
 	"github.com/GGjahon/bitcask-kv/utils"
@@ -109,18 +107,7 @@ func TestPrefixIterator(t *testing.T) {
 	}
 
 }
-func TestPath(t *testing.T) {
-	dir := "/tmp/bitcask-kv-data"
-	t.Log(path.Dir(path.Clean(dir)))
-	t.Log(path.Clean(dir))
-	t.Log(path.Dir(dir))
-	t.Log(path.Base(dir))
 
-	dir1 := path.Dir(path.Clean(dir))
-	base1 := path.Base(dir)
-	t.Log(filepath.Join(dir1, base1+mergerDirName))
-
-	dir2 := path.Dir(dir)
-	base2 := path.Base(dir)
-	t.Log(filepath.Join(dir2, base2+mergerDirName))
-}
+// func TestRemove(t *testing.T) {
+// 	os.RemoveAll("bitcask-kv-data-merge")
+// }

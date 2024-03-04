@@ -12,7 +12,9 @@ type IndexTypes = int8
 const (
 	Btree IndexTypes = iota + 1
 
-	ART
+	ARtree
+
+	BPtree
 )
 
 // Index give all method for operating the key of data in memory.Every different could implement own method with this interface
@@ -41,13 +43,14 @@ type Item struct {
 func (ai *Item) Less(bi btree.Item) bool {
 	return bytes.Compare(ai.key, bi.(*Item).key) == -1
 }
-func NewIndex(typ IndexTypes) Index {
+func NewIndex(typ IndexTypes, dirpath string, sync bool) Index {
 	switch typ {
 	case Btree:
 		return NewBTree()
-	case ART:
-		//to do ART
-		return nil
+	case ARtree:
+		return NewAdaPtiveRadixTree()
+	case BPtree:
+		return NewBPlusTree(dirpath, sync)
 	default:
 		panic("unsupported index type")
 	}

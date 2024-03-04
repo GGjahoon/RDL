@@ -21,12 +21,12 @@ func TestOpenDBWithoutOptions(t *testing.T) {
 }
 func TestOpenDBWithOptions(t *testing.T) {
 	db, err := Open(WithDBDirPath("../user1data"),
-		WithDBIndexType(index.ART),
+		WithDBIndexType(index.ARtree),
 		WithDBMaxDataFileSize(150000),
 		WithDBSync(true),
 	)
 	require.NoError(t, err)
-	require.Equal(t, db.Options.IndexType, index.ART)
+	require.Equal(t, db.Options.IndexType, index.ARtree)
 	require.Equal(t, db.Options.DirPath, "../user1data")
 	require.Equal(t, db.Options.MaxDataFileSize, int64(150000))
 	require.Equal(t, db.Options.SyncWrites, true)
@@ -277,3 +277,13 @@ func TestFold(t *testing.T) {
 	})
 	assert.NoError(t, err)
 }
+
+// func TestOpenMergeDB(t *testing.T) {
+// 	db, err := Open()
+// 	assert.NoError(t, err)
+// 	mergePath := db.getMergePath()
+
+// 	mergeDB, err := Open(WithDBDirPath(mergePath))
+// 	assert.NoError(t, err)
+// 	assert.Equal(t, mergePath, mergeDB.Options.DirPath)
+// }

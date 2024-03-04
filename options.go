@@ -3,9 +3,19 @@ package bitcaskkv
 import "github.com/GGjahon/bitcask-kv/index"
 
 const (
-	DefaultDirPath         = "./bitcask-kv-data"
+	DefaultDirPath         = "bitcask-kv-data"
 	DefalutMaxDataFileSize = 128 * 1024 * 1024
 	DefaultIndexType       = index.Btree
+)
+
+type IndexTypes = int8
+
+const (
+	Btree IndexTypes = iota + 1
+
+	ART
+
+	BPTree
 )
 
 type Options struct {

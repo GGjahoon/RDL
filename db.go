@@ -3,6 +3,7 @@ package bitcaskkv
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,17 +13,20 @@ import (
 	"github.com/GGjahon/bitcask-kv/index"
 )
 
+const seqNoKey = "seq-No"
+
 // DB is a implement of bitcask for user
 type DB struct {
 	Options
-	mu         *sync.RWMutex
-	index      index.Index
-	activeFile *data.DataFile
-	fileIds    []int // 仅用于加载索引
-	olderFiles map[uint32]*data.DataFile
-	seqNo      uint64
-	//标识是否正在进行merge 同一深刻下仅可有一个merge线程
-	isMerging bool
+	mu           *sync.RWMutex
+	index        index.Index
+	activeFile   *data.DataFile
+	fileIds      []int // 仅用于加载索引
+	olderFiles   map[uint32]*data.DataFile
+	seqNo        uint64
+	isMerging    bool //标识是否正在进行merge 同一深刻下仅可有一个merge线程
+	seqNoFExists bool //标识seqFile是否存在于db数据目录下
+	isInitial    bool
 }
 
 func Open(opts ...DBOption) (*DB, error) {
@@ -30,35 +34,50 @@ func Open(opts ...DBOption) (*DB, error) {
 		Options:    Options{},
 		mu:         new(sync.RWMutex),
 		olderFiles: make(map[uint32]*data.DataFile),
+		isInitial:  true,
 	}
 	for _, opt := range opts {
 		opt(&db.Options)
 	}
 
 	repaireDB(&db.Options)
-	db.index = index.NewIndex(db.Options.IndexType)
+	db.index = index.NewIndex(db.Options.IndexType, db.DirPath, db.SyncWrites)
 	//判断用户输入的路径是否存在，若不存在，则帮用户创建该目录,若路径为db的默认路径，则无需创建
 	if db.Options.DirPath != DefaultDirPath {
 		if _, err := os.Stat(db.Options.DirPath); os.IsNotExist(err) {
-
 			if err := os.Mkdir(db.Options.DirPath, os.ModePerm); err != nil {
-
 				return nil, err
 			}
 		}
 	}
-	// 启动DB前，若目标目录中有老的.data文件，需要加载至db。
+	// 启动DB前，若目标目录中有老的 .data文件，需要加载至db。
+	// 先将merge文件夹的所有数据导入至bitcask-kv-data（存储db数据）的文件夹下
+	if err := db.loadMergeFiles(); err != nil {
+		return nil, err
+	}
+
 	// 加载数据文件
 	if err := db.loadDataFiles(); err != nil {
-
 		return nil, err
 	}
+	// 若db的索引类型是B+树，则无需从hintFile/dataFile内加载索引，直接使用目标文件内存储的索引即可
+	if db.IndexType != index.BPtree {
+		// 循环读取dataFile前，若存在merge文件夹，则先读取hint文件，直接添加hint文件索引
+		// 在后续读取dataFile时直接跳过以及被merge的文件。
+		if err := db.loadIndexFromHintFile(); err != nil {
+			return nil, err
+		}
 
-	// 循环读取datafile，将key读取至索引，储存在内存中
-	if err := db.loadIndexFromDataFiles(); err != nil {
-
-		return nil, err
+		// 循环读取datafile，将key读取至索引，储存在内存中
+		if err := db.loadIndexFromDataFiles(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := db.loadSeqNo(); err != nil {
+			return nil, err
+		}
 	}
+
 	return &db, nil
 }
 
@@ -85,6 +104,7 @@ func (db *DB) loadDataFiles() error {
 	sort.Ints(fileIds)
 	// 为了之后有序加载index，将排序后的fileIds添加到DB结构体中
 	db.fileIds = fileIds
+	db.isInitial = false
 	for i, fid := range fileIds {
 		dataFile, err := data.OpenDataFile(db.DirPath, uint32(fid))
 		if err != nil {
@@ -105,6 +125,17 @@ func (db *DB) loadIndexFromDataFiles() error {
 	if fileNums == 0 {
 		return nil
 	}
+	//判断是否发生过merge ， 即查看是否存在mergeFinishedFile
+	hasMerge, noMergeDataFileId := false, uint32(0)
+	mergeFFName := filepath.Join(db.Options.DirPath, data.MergeFinishedFileName)
+	if _, err := os.Stat(mergeFFName); err == nil {
+		fid, err := db.getNoMergeFileId(db.DirPath)
+		if err != nil {
+			return err
+		}
+		hasMerge = true
+		noMergeDataFileId = fid
+	}
 	updateIndex := func(key []byte, typ data.LogRecordType, logRecordPos *data.LogRecordPos) {
 		var ok bool
 		if typ == data.LogRecordDeleted {
@@ -121,8 +152,11 @@ func (db *DB) loadIndexFromDataFiles() error {
 	var currentSeqNo = nonTransactionSeqNo
 	//遍历所有文件，处理文件中的记录，将key加载至index中
 	for i, fid := range db.fileIds {
-
 		var fileId = uint32(fid)
+		// 若fileId<noMergeDataFileId,说明此前在Hint文件中已经加载过索引了，无需再次加载，直接跳过本次循环即可
+		if hasMerge && fileId < noMergeDataFileId {
+			continue
+		}
 		var dataFile *data.DataFile
 		if fileId == db.activeFile.FileID {
 			dataFile = db.activeFile
@@ -219,7 +253,6 @@ func (db *DB) appendLogRecordWithLock(logRecord *data.LogRecord) (*data.LogRecor
 }
 
 func (db *DB) appendLogRecord(logRecord *data.LogRecord) (*data.LogRecordPos, error) {
-
 	//判断db当前的活跃文件是否存在，若不存在，需要初始化活跃文件
 	if db.activeFile == nil {
 		if err := db.setActiveFile(); err != nil {
@@ -280,7 +313,7 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 func (db *DB) ListKeys(reverse bool) [][]byte {
 
 	iterator := db.index.Iterator(reverse)
-
+	defer iterator.Close()
 	keys := make([][]byte, db.index.Size())
 	var idx int
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
@@ -325,6 +358,7 @@ func (db *DB) Fold(ff FoldFunc) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	iterator := db.index.Iterator(false)
+	defer iterator.Close()
 	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
 		value, err := db.getLogRecordValue(iterator.Value())
 		if err != nil {
@@ -380,6 +414,31 @@ func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	// 若db的index类型为b+树，无需从data文件获取索引，则无法获取当前db的batch写的seqNo，则使用单独的文件来保存seqno
+	if db.IndexType == index.BPtree {
+		//保存当前事务序列号
+		seqNoFile, err := data.OpenSeqNoFile(db.Options.DirPath)
+		if err != nil {
+			return err
+		}
+		seqRecord := &data.LogRecord{
+			Key:   []byte(seqNoKey),
+			Value: []byte(strconv.FormatUint(db.seqNo, 10)),
+		}
+		encSeqRecord, _ := data.EnCodeLogRecord(seqRecord)
+		if err := seqNoFile.Write(encSeqRecord); err != nil {
+			return err
+		}
+
+		if err := seqNoFile.Sync(); err != nil {
+			return err
+		}
+
+		if err := seqNoFile.Close(); err != nil {
+			return err
+		}
+	}
+
 	//关闭当前活跃文件
 	if err := db.activeFile.Close(); err != nil {
 		return err
@@ -401,4 +460,32 @@ func (db *DB) Sync() error {
 		return err
 	}
 	return nil
+}
+
+// 从特定的seqFile内加载出db的seqno
+func (db *DB) loadSeqNo() error {
+	fileName := filepath.Join(db.Options.DirPath, data.SeqNoFileName)
+	if _, err := os.Stat(fileName); os.IsExist(err) {
+		//若不存在，直接返回，默认seqNo为0
+		return nil
+	}
+	seqFile, err := data.OpenSeqNoFile(db.DirPath)
+	if err != nil {
+		return err
+	}
+	encRecord, _, header, err := seqFile.Get(0)
+	if err != nil {
+		return err
+	}
+	record, err := data.DecodeLogRecord(encRecord, header)
+	if err != nil {
+		return err
+	}
+	seqNo, err := strconv.ParseUint(string(record.Value), 10, 64)
+	if err != nil {
+		return err
+	}
+	db.seqNo = seqNo
+	db.seqNoFExists = true
+	return os.Remove(fileName)
 }
